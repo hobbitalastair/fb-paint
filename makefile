@@ -1,7 +1,7 @@
 LIBS = `pkg-config --libs libnsfb`
 CC = gcc
-CFLAGS = -Wall -Werror -O2 -g
-BIN = raster
+CFLAGS += -Wall -Werror -O0 -g
+BIN = paint
 
 all: $(BIN)
 
