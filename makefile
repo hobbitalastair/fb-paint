@@ -1,6 +1,6 @@
 LIBS = `pkg-config --libs libnsfb`
 CC = gcc
-CFLAGS += -Wall -Werror -O0 -g
+CFLAGS += -Wall -Werror -O1 -g
 BIN = paint
 
 all: $(BIN)

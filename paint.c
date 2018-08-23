@@ -34,6 +34,12 @@ typedef struct {
 } point_t;
 
 typedef struct {
+    int width;
+    int height;
+    nsfb_colour_t* buf;
+} image_t;
+
+typedef struct {
     /* Visible display width and height */
     int width;
     int height;
@@ -46,20 +52,20 @@ typedef struct {
     /* Cursor location */
     int cur_x;
     int cur_y;
-	nsfb_colour_t cur_content; /* Content under the cursor */
+    image_t cur_content;
+
+    /* Image scaling */
+    int offset_x;
+    int offset_y;
+    int scale;
 
     /* Shared libnsfb context */
     nsfb_t *nsfb;
 } display_t;
 
 typedef struct {
-    int width;
-    int height;
-    uint8_t* buf;
-} image_t;
-
-typedef struct {
     nsfb_colour_t background;
+    nsfb_colour_t active;
     image_t img;
 } content_t;
 
@@ -71,19 +77,20 @@ void initialise_content(content_t *c, int argc, char** argv) {
      */
 
     c->background = 0xFFFFFFFF;
+    c->active = 0xFF00FFFF;
     c->img.width = 50;
     c->img.height = 50;
     c->img.buf = malloc(c->img.width * c->img.height * IMG_DEPTH);
     if (c->img.buf == NULL) {
-	fprintf(stderr, "%s: failed to allocate image buffer\n", name);
-	exit(1);
+        fprintf(stderr, "%s: failed to allocate image buffer\n", name);
+        exit(1);
     }
-    for (size_t i = 0; i < c->img.width * c->img.height * IMG_DEPTH; i++) {
+    for (size_t i = 0; i < c->img.width * c->img.height; i++) {
         c->img.buf[i] = 0;
     }
 }
 
-void initialise_display(display_t *d) {
+void initialise_display(display_t *d, content_t *c) {
     /* Initialise the given display struct.
      *
      * This exits on failure.
@@ -97,17 +104,28 @@ void initialise_display(display_t *d) {
 
     if (nsfb_get_geometry(d->nsfb, &d->width, &d->height, &d->format) != 0) {
         fprintf(stderr, "%s: failed to get window geometry\n", name);
-	nsfb_free(d->nsfb);
+        nsfb_free(d->nsfb);
         exit(EXIT_FAILURE);
     }
     if (nsfb_get_buffer(d->nsfb, &d->buf, &d->stride) != 0) {
         fprintf(stderr, "%s: failed to get window buffer\n", name);
-	nsfb_free(d->nsfb);
+        nsfb_free(d->nsfb);
         exit(EXIT_FAILURE);
     }
 
-    d->cur_x = d->width / 2;
-    d->cur_y = d->height / 2;
+    d->cur_x = 0;
+    d->cur_y = 0;
+    d->cur_content.width = 20;
+    d->cur_content.height = 30;
+    d->cur_content.buf = malloc(d->cur_content.width * d->cur_content.height * IMG_DEPTH);
+    if (d->cur_content.buf == NULL) {
+        fprintf(stderr, "%s: failed to allocate cursor backing buffer\n", name);
+        exit(EXIT_FAILURE);
+    }
+
+    d->scale = 5;
+    d->offset_x = (d->width / (2 * d->scale)) - (c->img.width / 2);
+    d->offset_y = (d->height / (2 * d->scale)) - (c->img.height / 2);
 }
 
 void resize_display(display_t *d, int width, int height) {
@@ -123,29 +141,34 @@ void resize_display(display_t *d, int width, int height) {
 
     if (nsfb_get_geometry(d->nsfb, &d->width, &d->height, &d->format) != 0) {
         fprintf(stderr, "%s: failed to get window geometry\n", name);
-	nsfb_free(d->nsfb);
+        nsfb_free(d->nsfb);
         exit(EXIT_FAILURE);
     }
     if (nsfb_get_buffer(d->nsfb, &d->buf, &d->stride) != 0) {
         fprintf(stderr, "%s: failed to get window buffer\n", name);
-	nsfb_free(d->nsfb);
+        nsfb_free(d->nsfb);
         exit(EXIT_FAILURE);
     }
 }
 
-static inline point_t display_to_img(int x, int y) {
+static inline point_t display_to_img(display_t* d, int x, int y) {
     /* Convert from a point in display coordinates to a point in the image */
     
-    point_t p = {x, y};
+    point_t p = {(x / d->scale) - d->offset_x, (y / d->scale) - d->offset_y};
     return p;
 }
 
 void render_cursor(display_t *d) {
-	/* Draw the cursor at the given coordinates */
+        /* Draw the cursor at the given coordinates */
 
-	int offset = d->cur_x + d->cur_y * (d->stride / 4);
-	d->cur_content = ((nsfb_colour_t*)d->buf)[offset];
-    ((nsfb_colour_t*)d->buf)[offset] = 0xFFFF0000;
+    for (int y = 0; y < d->cur_content.height; y++) {
+        for (int x = 0; x < d->cur_content.width; x++) {
+            int offset = (d->cur_x + x) + (d->cur_y + y) * (d->stride / 4);
+            d->cur_content.buf[x + y * d->cur_content.height] = 
+                ((nsfb_colour_t*)d->buf)[offset];
+            ((nsfb_colour_t*)d->buf)[offset] = 0xFFFF0000;
+        }
+    }
 }
 
 void render(display_t *d, content_t *c) {
@@ -159,15 +182,15 @@ void render(display_t *d, content_t *c) {
 
     for (int y = 0; y < d->height; y++) {
         for (int x = 0; x < d->width; x++) {
-	    point_t p = display_to_img(x, y);
-	    nsfb_colour_t colour = c->background;
-	    if (p.x < c->img.width && p.x >= 0 && p.y < c->img.height && p.y >= 0) {
-		colour = c->img.buf[p.x + (p.y * c->img.height)];
-	    } else if ((p.x + p.y) % 2 == 0) {
-		colour = 0;
-	    }
-	    ((nsfb_colour_t*)d->buf)[x + y * (d->stride / 4)] = colour;
-	}
+            point_t p = display_to_img(d, x, y);
+            nsfb_colour_t colour = c->background;
+            if (p.x < c->img.width && p.x >= 0 && p.y < c->img.height && p.y >= 0) {
+                colour = c->img.buf[p.x + (p.y * c->img.height)];
+            } else if ((p.x + p.y) % 2 == 0) {
+                colour = 0;
+            }
+            ((nsfb_colour_t*)d->buf)[x + y * (d->stride / 4)] = colour;
+        }
     }
 
     render_cursor(d);
@@ -178,31 +201,38 @@ void render(display_t *d, content_t *c) {
 }
 
 void move_cursor(display_t *d, int x, int y) {
-	/* Restore the content under the old cursor */
+        /* Restore the content under the old cursor */
 
-    nsfb_bbox_t cur_box_orig = {d->cur_x, d->cur_y, d->cur_x+1, d->cur_y+1};
+    nsfb_bbox_t cur_box_orig = {d->cur_x, d->cur_y,
+        d->cur_x+d->cur_content.width, d->cur_y+d->cur_content.height};
     if (nsfb_claim(d->nsfb, &cur_box_orig) != 0) {
         fprintf(stderr, "%s: failed to claim cursor window region\n", name);
         return;
     }
 
-	int offset = d->cur_x + d->cur_y * (d->stride / 4);
-    ((nsfb_colour_t*)d->buf)[offset] = d->cur_content;
+    for (int y = 0; y < d->cur_content.height; y++) {
+        for (int x = 0; x < d->cur_content.width; x++) {
+            int offset = (d->cur_x + x) + (d->cur_y + y) * (d->stride / 4);
+            ((nsfb_colour_t*)d->buf)[offset] = 
+                d->cur_content.buf[x + y * d->cur_content.height];
+        }
+    }
 
     if (nsfb_update(d->nsfb, &cur_box_orig) != 0) {
         fprintf(stderr, "%s: failed to update window\n", name);
     }
 
-	d->cur_x = x;
-	d->cur_y = y;
+        d->cur_x = x;
+        d->cur_y = y;
 
-    nsfb_bbox_t cur_box = {d->cur_x, d->cur_y, d->cur_x+1, d->cur_y+1};
+    nsfb_bbox_t cur_box = {d->cur_x, d->cur_y,
+        d->cur_x+d->cur_content.width, d->cur_y+d->cur_content.height};
     if (nsfb_claim(d->nsfb, &cur_box) != 0) {
         fprintf(stderr, "%s: failed to claim cursor window region\n", name);
         return;
     }
 
-	render_cursor(d);
+        render_cursor(d);
 
     if (nsfb_update(d->nsfb, &cur_box) != 0) {
         fprintf(stderr, "%s: failed to update window\n", name);
@@ -220,7 +250,7 @@ int main(int argc, char** argv) {
     initialise_content(&content, argc - 1, &(argv[1]));
 
     display_t d;
-    initialise_display(&d);
+    initialise_display(&d, &content);
 
     render(&d, &content);
 
@@ -233,39 +263,45 @@ int main(int argc, char** argv) {
                 if (event.value.controlcode == NSFB_CONTROL_QUIT) {
                     nsfb_free(d.nsfb);
                     exit(0);
-		}
+                }
             } else if (event.type == NSFB_EVENT_KEY_DOWN) {
                 enum nsfb_key_code_e code = event.value.keycode;
                 if (code == NSFB_KEY_q) {
                     nsfb_free(d.nsfb);
                     exit(0);
+                } else if (code == NSFB_KEY_MOUSE_1) {
+                    point_t p = display_to_img(&d, d.cur_x, d.cur_y);
+                    if (p.x >= 0 && p.x < content.img.width && p.y >= 0 && p.y < content.img.height) {
+                        content.img.buf[p.x + p.y * content.img.width] = content.active;
+                        needs_redraw = true;
+                    }
                 }
             } else if (event.type == NSFB_EVENT_RESIZE) {
-		int clamped_x = d.cur_x;
-		int clamped_y = d.cur_y;
-	    	if (clamped_x >= event.value.resize.w) clamped_x = event.value.resize.w - 1;
-	    	if (clamped_x < 0) clamped_x = 0;
-	    	if (clamped_y >= event.value.resize.h) clamped_y = event.value.resize.h - 1;
-	    	if (clamped_y < 0) clamped_y = 0;
-		move_cursor(&d, clamped_x, clamped_y);
+                int clamped_x = d.cur_x;
+                int clamped_y = d.cur_y;
+                if (clamped_x >= event.value.resize.w) clamped_x = event.value.resize.w - 1;
+                if (clamped_x < 0) clamped_x = 0;
+                if (clamped_y >= event.value.resize.h) clamped_y = event.value.resize.h - 1;
+                if (clamped_y < 0) clamped_y = 0;
+                move_cursor(&d, clamped_x, clamped_y);
                 resize_display(&d,
                         event.value.resize.w, event.value.resize.h);
-		needs_redraw = true;
+                needs_redraw = true;
             } else if (event.type == NSFB_EVENT_MOVE_ABSOLUTE) {
-		int clamped_x = event.value.vector.x;
-		int clamped_y = event.value.vector.y;
-	    	if (clamped_x >= d.width) clamped_x = d.width - 1;
-	    	if (clamped_x < 0) clamped_x = 0;
-	    	if (clamped_y >= d.height) clamped_y = d.height - 1;
-	    	if (clamped_y < 0) clamped_y = 0;
-		move_cursor(&d, clamped_x, clamped_y);
-	    }
+                int clamped_x = event.value.vector.x;
+                int clamped_y = event.value.vector.y;
+                if (clamped_x >= d.width) clamped_x = d.width - 1;
+                if (clamped_x < 0) clamped_x = 0;
+                if (clamped_y >= d.height) clamped_y = d.height - 1;
+                if (clamped_y < 0) clamped_y = 0;
+                move_cursor(&d, clamped_x, clamped_y);
+            }
             
-	    if (needs_redraw || (event.type == NSFB_EVENT_CONTROL &&
-			event.value.controlcode == NSFB_CONTROL_TIMEOUT)) {
-	    	render(&d, &content);
-	    	needs_redraw = false;
-	    }
-	}
+            if (needs_redraw || (event.type == NSFB_EVENT_CONTROL &&
+                        event.value.controlcode == NSFB_CONTROL_TIMEOUT)) {
+                render(&d, &content);
+                needs_redraw = false;
+            }
+        }
     }
 }
