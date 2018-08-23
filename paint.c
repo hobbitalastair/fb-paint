@@ -115,8 +115,8 @@ void initialise_display(display_t *d, content_t *c) {
 
     d->cur_x = 0;
     d->cur_y = 0;
-    d->cur_content.width = 20;
-    d->cur_content.height = 30;
+    d->cur_content.width = 10;
+    d->cur_content.height = 15;
     d->cur_content.buf = malloc(d->cur_content.width * d->cur_content.height * IMG_DEPTH);
     if (d->cur_content.buf == NULL) {
         fprintf(stderr, "%s: failed to allocate cursor backing buffer\n", name);
@@ -153,13 +153,12 @@ void resize_display(display_t *d, int width, int height) {
 
 static inline point_t display_to_img(display_t* d, int x, int y) {
     /* Convert from a point in display coordinates to a point in the image */
-    
     point_t p = {(x / d->scale) - d->offset_x, (y / d->scale) - d->offset_y};
     return p;
 }
 
 void render_cursor(display_t *d) {
-        /* Draw the cursor at the given coordinates */
+    /* Draw the cursor at the given coordinates */
 
     for (int y = 0; y < d->cur_content.height; y++) {
         for (int x = 0; x < d->cur_content.width; x++) {
@@ -201,7 +200,7 @@ void render(display_t *d, content_t *c) {
 }
 
 void move_cursor(display_t *d, int x, int y) {
-        /* Restore the content under the old cursor */
+    /* Restore the content under the old cursor */
 
     nsfb_bbox_t cur_box_orig = {d->cur_x, d->cur_y,
         d->cur_x+d->cur_content.width, d->cur_y+d->cur_content.height};
@@ -222,8 +221,8 @@ void move_cursor(display_t *d, int x, int y) {
         fprintf(stderr, "%s: failed to update window\n", name);
     }
 
-        d->cur_x = x;
-        d->cur_y = y;
+    d->cur_x = x;
+    d->cur_y = y;
 
     nsfb_bbox_t cur_box = {d->cur_x, d->cur_y,
         d->cur_x+d->cur_content.width, d->cur_y+d->cur_content.height};
@@ -232,7 +231,7 @@ void move_cursor(display_t *d, int x, int y) {
         return;
     }
 
-        render_cursor(d);
+    render_cursor(d);
 
     if (nsfb_update(d->nsfb, &cur_box) != 0) {
         fprintf(stderr, "%s: failed to update window\n", name);
@@ -302,7 +301,7 @@ int main(int argc, char** argv) {
                 if (clamped_y < 0) clamped_y = 0;
                 move_cursor(&d, clamped_x, clamped_y);
                 resize_display(&d,
-                        event.value.resize.w, event.value.resize.h);
+                    event.value.resize.w, event.value.resize.h);
                 needs_redraw = true;
             } else if (event.type == NSFB_EVENT_MOVE_ABSOLUTE) {
                 int clamped_x = event.value.vector.x;
@@ -315,7 +314,7 @@ int main(int argc, char** argv) {
             }
             
             if (needs_redraw || (event.type == NSFB_EVENT_CONTROL &&
-                        event.value.controlcode == NSFB_CONTROL_TIMEOUT)) {
+                    event.value.controlcode == NSFB_CONTROL_TIMEOUT)) {
                 render(&d, &content);
                 needs_redraw = false;
             }
