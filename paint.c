@@ -269,13 +269,30 @@ int main(int argc, char** argv) {
                 if (code == NSFB_KEY_q) {
                     nsfb_free(d.nsfb);
                     exit(0);
-                } else if (code == NSFB_KEY_MOUSE_1) {
+                }
+                
+                if (code == NSFB_KEY_MOUSE_1) {
                     point_t p = display_to_img(&d, d.cur_x, d.cur_y);
                     if (p.x >= 0 && p.x < content.img.width && p.y >= 0 && p.y < content.img.height) {
                         content.img.buf[p.x + p.y * content.img.width] = content.active;
-                        needs_redraw = true;
                     }
                 }
+                if (code == NSFB_KEY_LEFT) d.offset_x--;
+                if (code == NSFB_KEY_RIGHT) d.offset_x++;
+                if (code == NSFB_KEY_UP) d.offset_y--;
+                if (code == NSFB_KEY_DOWN) d.offset_y++;
+                if (d.scale > 1 && (code == NSFB_KEY_MINUS || code == NSFB_KEY_KP_MINUS)) {
+                    d.offset_x *= 2;
+                    d.offset_y *= 2;
+                    d.scale /= 2;
+                }
+                if (code == NSFB_KEY_PLUS || code == NSFB_KEY_KP_PLUS ||
+                    code == NSFB_KEY_EQUALS || code == NSFB_KEY_KP_EQUALS) {
+                    d.offset_x /= 2;
+                    d.offset_y /= 2;
+                    d.scale *= 2;
+                }
+                needs_redraw = true;
             } else if (event.type == NSFB_EVENT_RESIZE) {
                 int clamped_x = d.cur_x;
                 int clamped_y = d.cur_y;
