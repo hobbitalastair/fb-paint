@@ -21,7 +21,6 @@
 #include <libnsfb.h>
 #include <libnsfb_event.h>
 #include <libnsfb_plot.h>
-#include <libnsfb_cursor.h>
 
 #define SURFACE_TYPE NSFB_SURFACE_SDL /* Default surface type */
 #define IMG_DEPTH (sizeof(nsfb_colour_t)) /* Image depth, in bytes */
